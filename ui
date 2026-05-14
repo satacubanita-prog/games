@@ -1,5 +1,4 @@
-// Gaming Meta Hub - Starter Full App (React)
-// Basic multi-page setup using React state routing (no external router needed)
+// Gaming Meta Hub - Full App with Animations
 
 import { useState } from "react";
 
@@ -29,53 +28,148 @@ const warzoneLoadouts = [
   }
 ];
 
+// ── Keyframe animations ───────────────────────────────────────────────────────
+const CSS = `
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateX(-18px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes popIn {
+    0%   { opacity: 0; transform: scale(0.85); }
+    65%  { transform: scale(1.05); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes ripple {
+    from { transform: scale(0); opacity: 0.5; }
+    to   { transform: scale(5); opacity: 0; }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.55; }
+  }
+
+  /* Button press feedback */
+  .gmh-btn {
+    position: relative; overflow: hidden;
+    transition: transform 0.08s ease, filter 0.1s ease;
+  }
+  .gmh-btn:active { transform: scale(0.93); filter: brightness(0.88); }
+
+  /* Card hover lift */
+  .gmh-card {
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .gmh-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 32px rgba(0,0,0,0.4);
+  }
+
+  /* Search input focus ring animation */
+  .gmh-input {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    outline: none;
+    border: 2px solid transparent;
+  }
+  .gmh-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+  }
+
+  /* Trending badge pulse */
+  .gmh-pulse { animation: pulse 2s ease-in-out infinite; }
+`;
+
+// ── Ripple button ─────────────────────────────────────────────────────────────
+function Btn({ onClick, className = "", style, children, disabled }) {
+  const [ripples, setRipples] = useState([]);
+
+  function handleClick(e) {
+    if (disabled) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const id = Date.now() + Math.random();
+    setRipples(r => [...r, { id, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
+    setTimeout(() => setRipples(r => r.filter(rip => rip.id !== id)), 700);
+    onClick?.(e);
+  }
+
+  return (
+    <button onClick={handleClick} disabled={disabled} className={`gmh-btn ${className}`} style={style}>
+      {ripples.map(rip => (
+        <span key={rip.id} style={{
+          position: "absolute", left: rip.x - 10, top: rip.y - 10,
+          width: 20, height: 20, borderRadius: "50%",
+          background: "rgba(255,255,255,0.35)",
+          animation: "ripple 0.7s ease-out forwards",
+          pointerEvents: "none",
+        }} />
+      ))}
+      {children}
+    </button>
+  );
+}
+
 export default function App() {
   const [page, setPage] = useState("home");
   const [selectedGame, setSelectedGame] = useState(null);
 
   function renderHome() {
     return (
-      <div className="p-6 text-white bg-gray-900 min-h-screen">
-        <h1 className="text-4xl font-bold">Gaming Meta Hub 🎮</h1>
-        <p className="text-gray-400 mt-2">
+      <div className="p-6 text-white bg-gray-900 min-h-screen" style={{ animation: "fadeSlideUp 0.38s ease" }}>
+        <h1 className="text-4xl font-bold" style={{ animation: "fadeSlideUp 0.38s ease" }}>
+          Gaming Meta Hub 🎮
+        </h1>
+        <p className="text-gray-400 mt-2" style={{ animation: "fadeSlideUp 0.38s ease 0.05s both" }}>
           Best loadouts, builds, and meta strategies
         </p>
 
         <input
-          className="w-full p-3 mt-5 rounded text-black"
+          className="gmh-input w-full p-3 mt-5 rounded bg-gray-800 text-white placeholder-gray-500"
           placeholder="Search loadouts..."
+          style={{ animation: "fadeSlideUp 0.38s ease 0.1s both" }}
         />
 
-        <h2 className="text-2xl mt-6">Choose Game</h2>
+        <h2 className="text-2xl mt-6" style={{ animation: "fadeSlideIn 0.35s ease 0.12s both" }}>
+          Choose Game
+        </h2>
 
         <div className="grid grid-cols-3 gap-4 mt-3">
-          <button
-            className="bg-gray-800 p-4 rounded"
-            onClick={() => {
-              setSelectedGame("fortnite");
-              setPage("game");
-            }}
+          <Btn
+            className="gmh-card bg-gray-800 p-4 rounded-xl font-medium hover:bg-gray-700"
+            style={{ animation: "popIn 0.35s ease 0.15s both" }}
+            onClick={() => { setSelectedGame("fortnite"); setPage("game"); }}
           >
             🎯 Fortnite
-          </button>
+          </Btn>
 
-          <button
-            className="bg-gray-800 p-4 rounded"
-            onClick={() => {
-              setSelectedGame("warzone");
-              setPage("game");
-            }}
+          <Btn
+            className="gmh-card bg-gray-800 p-4 rounded-xl font-medium hover:bg-gray-700"
+            style={{ animation: "popIn 0.35s ease 0.22s both" }}
+            onClick={() => { setSelectedGame("warzone"); setPage("game"); }}
           >
             🔫 Warzone
-          </button>
+          </Btn>
 
-          <button className="bg-gray-800 p-4 rounded opacity-50">
+          <Btn
+            className="gmh-card bg-gray-800 p-4 rounded-xl font-medium opacity-50 cursor-not-allowed"
+            style={{ animation: "popIn 0.35s ease 0.29s both" }}
+            disabled
+          >
             🧱 Roblox (soon)
-          </button>
+          </Btn>
         </div>
 
-        <h2 className="text-2xl mt-8">🔥 Trending Meta</h2>
-        <div className="bg-gray-800 p-4 mt-3 rounded">
+        <h2 className="text-2xl mt-8" style={{ animation: "fadeSlideIn 0.35s ease 0.32s both" }}>
+          🔥 Trending Meta
+        </h2>
+        <div
+          className="gmh-card bg-gray-800 p-4 mt-3 rounded-xl border border-gray-700"
+          style={{ animation: "fadeSlideUp 0.35s ease 0.36s both" }}
+        >
+          <span className="gmh-pulse inline-block w-2 h-2 rounded-full bg-red-500 mr-2" />
           SMG + Shotgun combo is dominating ranked right now
         </div>
       </div>
@@ -86,24 +180,38 @@ export default function App() {
     const data = selectedGame === "fortnite" ? fortniteLoadouts : warzoneLoadouts;
 
     return (
-      <div className="p-6 text-white bg-gray-900 min-h-screen">
-        <button
-          className="mb-4 text-blue-400"
+      <div className="p-6 text-white bg-gray-900 min-h-screen" style={{ animation: "fadeSlideUp 0.35s ease" }}>
+        <Btn
+          className="mb-4 text-blue-400 hover:text-blue-300 bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-lg text-sm font-medium"
           onClick={() => setPage("home")}
         >
           ← Back
-        </button>
+        </Btn>
 
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-3xl font-bold mt-2">
           {selectedGame === "fortnite" ? "Fortnite" : "Warzone"} Loadouts
         </h1>
 
         <div className="mt-6 grid gap-4">
           {data.map((item, i) => (
-            <div key={i} className="bg-gray-800 p-4 rounded">
+            <div
+              key={i}
+              className="gmh-card bg-gray-800 p-4 rounded-xl border border-gray-700"
+              style={{ animation: `fadeSlideIn 0.35s ease ${i * 0.08}s both` }}
+            >
               <h2 className="text-xl font-bold">{item.name}</h2>
-              <p className="text-gray-400">{item.description}</p>
-              <p className="mt-2">Weapons: {item.weapons.join(", ")}</p>
+              <p className="text-gray-400 mt-1">{item.description}</p>
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {item.weapons.map((w, j) => (
+                  <span
+                    key={j}
+                    className="bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded-full"
+                    style={{ animation: `popIn 0.3s ease ${i * 0.08 + j * 0.05}s both` }}
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -111,5 +219,10 @@ export default function App() {
     );
   }
 
-  return page === "home" ? renderHome() : renderGamePage();
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      {page === "home" ? renderHome() : renderGamePage()}
+    </>
+  );
 }
