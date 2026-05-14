@@ -1,0 +1,449 @@
+// StudySnap - Animated Flashcard Study App
+
+import { useState } from "react";
+
+const DECKS = [
+  {
+    id: "biology",
+    title: "Biology 101",
+    emoji: "🧬",
+    color: "from-green-500 to-emerald-700",
+    cards: [
+      { front: "What is mitosis?", back: "Cell division producing two identical daughter cells" },
+      { front: "What is the powerhouse of the cell?", back: "The mitochondria" },
+      { front: "What is DNA?", back: "Deoxyribonucleic acid — carries genetic information" },
+      { front: "What is osmosis?", back: "Water moving through a semi-permeable membrane" },
+    ],
+  },
+  {
+    id: "history",
+    title: "World History",
+    emoji: "🏛️",
+    color: "from-amber-500 to-orange-700",
+    cards: [
+      { front: "When did WW2 end?", back: "1945" },
+      { front: "Who was the first US president?", back: "George Washington" },
+      { front: "When was the French Revolution?", back: "1789–1799" },
+      { front: "What was the Renaissance?", back: "Cultural rebirth in Europe (14th–17th century)" },
+    ],
+  },
+  {
+    id: "math",
+    title: "Math Formulas",
+    emoji: "📐",
+    color: "from-blue-500 to-indigo-700",
+    cards: [
+      { front: "Area of a circle?", back: "πr²" },
+      { front: "Pythagorean theorem?", back: "a² + b² = c²" },
+      { front: "Quadratic formula?", back: "x = (−b ± √(b²−4ac)) / 2a" },
+      { front: "Slope formula?", back: "m = (y₂−y₁) / (x₂−x₁)" },
+    ],
+  },
+];
+
+// ── Global CSS (keyframes + 3D card styles) ──────────────────────────────────
+const CSS = `
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(22px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateX(-20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes popIn {
+    0%  { opacity: 0; transform: scale(0.82); }
+    65% { transform: scale(1.05); }
+    100%{ opacity: 1; transform: scale(1); }
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%     { transform: translateX(-10px); }
+    40%     { transform: translateX(10px); }
+    60%     { transform: translateX(-7px); }
+    80%     { transform: translateX(7px); }
+  }
+  @keyframes correctBounce {
+    0%,100% { transform: scale(1); }
+    35%     { transform: scale(1.07); }
+    65%     { transform: scale(0.97); }
+  }
+  @keyframes ripple {
+    from { transform: scale(0); opacity: 0.5; }
+    to   { transform: scale(5); opacity: 0; }
+  }
+  @keyframes confettiFall {
+    0%   { transform: translateY(-8px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(160px) rotate(740deg); opacity: 0; }
+  }
+  @keyframes starPop {
+    0%   { transform: scale(0) rotate(-40deg); opacity: 0; }
+    60%  { transform: scale(1.3) rotate(10deg); }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  @keyframes barFill {
+    from { width: 0%; }
+  }
+  @keyframes pulseRing {
+    0%   { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+
+  /* 3D flip card */
+  .ss-scene { perspective: 900px; }
+  .ss-card {
+    transform-style: preserve-3d;
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative; width: 100%; height: 100%;
+  }
+  .ss-card.flipped { transform: rotateY(180deg); }
+  .ss-face {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    position: absolute; inset: 0;
+    border-radius: 1rem;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 2rem; text-align: center;
+  }
+  .ss-back { transform: rotateY(180deg); }
+
+  /* Button press + ripple */
+  .ss-btn {
+    position: relative; overflow: hidden;
+    transition: transform 0.08s ease, filter 0.08s ease;
+  }
+  .ss-btn:active { transform: scale(0.92); filter: brightness(0.9); }
+
+  /* Deck card hover lift */
+  .ss-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .ss-lift:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+  }
+`;
+
+// ── Confetti burst shown on session complete ──────────────────────────────────
+const CONFETTI_COLORS = ["#fbbf24","#3b82f6","#10b981","#ef4444","#8b5cf6","#f472b6","#06b6d4"];
+
+function Confetti() {
+  return (
+    <div style={{ position:"absolute", top:0, left:0, right:0, height:180, pointerEvents:"none", overflow:"hidden" }}>
+      {Array.from({ length: 22 }, (_, i) => (
+        <div key={i} style={{
+          position: "absolute",
+          left: `${3 + i * 4.4}%`,
+          top: -14,
+          width: 7 + (i % 4) * 3,
+          height: 7 + (i % 4) * 3,
+          background: CONFETTI_COLORS[i % 7],
+          borderRadius: i % 3 === 0 ? "50%" : "3px",
+          animation: `confettiFall ${0.85 + (i % 5) * 0.13}s ease-in ${(i % 6) * 0.06}s forwards`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ── Ripple button — spreads a circular highlight on click ────────────────────
+function Btn({ onClick, className = "", style, children, disabled }) {
+  const [ripples, setRipples] = useState([]);
+
+  function handleClick(e) {
+    if (disabled) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const id = Date.now() + Math.random();
+    setRipples(r => [...r, { id, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
+    setTimeout(() => setRipples(r => r.filter(rip => rip.id !== id)), 700);
+    onClick?.(e);
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={disabled}
+      className={`ss-btn ${className}`}
+      style={style}
+    >
+      {ripples.map(rip => (
+        <span key={rip.id} style={{
+          position: "absolute",
+          left: rip.x - 10, top: rip.y - 10,
+          width: 20, height: 20,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.35)",
+          animation: "ripple 0.7s ease-out forwards",
+          pointerEvents: "none",
+        }} />
+      ))}
+      {children}
+    </button>
+  );
+}
+
+// ── Home screen — animated deck list ─────────────────────────────────────────
+function Home({ onSelect }) {
+  return (
+    <div style={{ animation: "fadeSlideUp 0.38s ease" }}>
+      <div className="text-center mb-8 pt-2">
+        <h1 className="text-5xl font-extrabold text-white tracking-tight">
+          Study<span className="text-yellow-400">Snap</span>
+          <span style={{ display:"inline-block", animation:"popIn 0.5s ease 0.1s both" }}> ⚡</span>
+        </h1>
+        <p className="text-gray-400 mt-2">Flip cards. Learn fast. Ace it.</p>
+      </div>
+
+      <p className="text-gray-500 text-xs uppercase tracking-widest font-semibold mb-3 ml-1">
+        Choose a deck
+      </p>
+
+      <div className="flex flex-col gap-4">
+        {DECKS.map((deck, i) => (
+          <Btn
+            key={deck.id}
+            onClick={() => onSelect(deck)}
+            className={`ss-lift w-full bg-gradient-to-r ${deck.color} p-5 rounded-2xl text-left text-white`}
+            style={{ animation: `fadeSlideIn 0.38s ease ${i * 0.07}s both` }}
+          >
+            <div className="flex items-center gap-4">
+              <span className="text-4xl">{deck.emoji}</span>
+              <div>
+                <div className="text-lg font-bold">{deck.title}</div>
+                <div className="text-white/65 text-sm">{deck.cards.length} cards</div>
+              </div>
+              <span className="ml-auto text-white/50 text-2xl">›</span>
+            </div>
+          </Btn>
+        ))}
+      </div>
+
+      <div className="mt-8 bg-gray-800 rounded-2xl p-4 border border-gray-700/60">
+        <p className="text-gray-500 text-sm text-center">
+          💡 Tap a deck to start — flip cards &amp; track your score
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Study screen — flip cards + answer buttons ────────────────────────────────
+function StudyMode({ deck, onBack }) {
+  const [index, setIndex]           = useState(0);
+  const [flipped, setFlipped]       = useState(false);
+  const [feedback, setFeedback]     = useState(null);   // "correct" | "wrong" | null
+  const [feedbackAnim, setFeedbackAnim] = useState(null);
+  const [done, setDone]             = useState(false);
+  const [score, setScore]           = useState(0);
+  const [cardKey, setCardKey]       = useState(0);       // increment to remount card
+
+  const card = deck.cards[index];
+  const progressPct = (index / deck.cards.length) * 100;
+
+  function flip() {
+    if (!feedback) setFlipped(f => !f);
+  }
+
+  function answer(correct) {
+    if (feedback) return;
+    const fb = correct ? "correct" : "wrong";
+    setFeedback(fb);
+    setFeedbackAnim(fb === "wrong" ? "shake 0.42s ease" : "correctBounce 0.38s ease");
+    if (correct) setScore(s => s + 1);
+
+    setTimeout(() => {
+      setFeedback(null);
+      setFeedbackAnim(null);
+      setFlipped(false);
+      setTimeout(() => {
+        if (index + 1 >= deck.cards.length) {
+          setDone(true);
+        } else {
+          setIndex(i => i + 1);
+          setCardKey(k => k + 1);
+        }
+      }, 60);
+    }, 750);
+  }
+
+  // ── Results screen ──────────────────────────────────────────────────────────
+  if (done) {
+    const pct      = Math.round((score / deck.cards.length) * 100);
+    const emoji    = pct >= 75 ? "🏆" : pct >= 50 ? "💪" : "📚";
+    const headline = pct >= 75 ? "Crushed it!" : pct >= 50 ? "Good work!" : "Keep going!";
+    const barColor = pct >= 75 ? "bg-green-500" : pct >= 50 ? "bg-yellow-400" : "bg-red-500";
+
+    return (
+      <div className="text-center relative" style={{ animation: "fadeSlideUp 0.38s ease" }}>
+        <Confetti />
+
+        <div style={{ display:"inline-block", animation:"starPop 0.5s ease 0.15s both", fontSize:76 }}>
+          {emoji}
+        </div>
+        <h2 className="text-3xl font-extrabold text-white mt-3">{headline}</h2>
+        <p className="text-gray-400 mt-1 text-lg">
+          {score}/{deck.cards.length} correct &middot; {pct}%
+        </p>
+
+        {/* Animated score bar */}
+        <div className="bg-gray-800 rounded-full h-3 mt-6 overflow-hidden">
+          <div
+            className={`h-full rounded-full ${barColor}`}
+            style={{ width: `${pct}%`, animation: "barFill 1s ease 0.45s both" }}
+          />
+        </div>
+
+        {/* Per-card dots */}
+        <div className="flex gap-1.5 mt-3 justify-center">
+          {Array.from({ length: deck.cards.length }, (_, i) => (
+            <div
+              key={i}
+              className="w-2 h-2 rounded-full"
+              style={{
+                background: i < score ? "#10b981" : "#ef4444",
+                animation: `popIn 0.3s ease ${i * 0.05 + 0.5}s both`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <Btn
+            onClick={() => {
+              setIndex(0); setFlipped(false); setDone(false);
+              setScore(0); setFeedback(null); setFeedbackAnim(null);
+              setCardKey(k => k + 1);
+            }}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl"
+          >
+            🔄 Retry
+          </Btn>
+          <Btn
+            onClick={onBack}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl"
+          >
+            ← Decks
+          </Btn>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Card screen ─────────────────────────────────────────────────────────────
+  return (
+    <div style={{ animation: "fadeSlideUp 0.35s ease" }}>
+
+      {/* Top bar */}
+      <div className="flex items-center justify-between mb-5">
+        <Btn
+          onClick={onBack}
+          className="text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-lg font-medium"
+        >
+          ← Back
+        </Btn>
+        <span className="text-white font-semibold text-sm">{deck.emoji} {deck.title}</span>
+        <span className="text-gray-400 text-sm font-mono">{index + 1}/{deck.cards.length}</span>
+      </div>
+
+      {/* Smooth progress bar */}
+      <div className="bg-gray-800 rounded-full h-2 mb-4 overflow-hidden">
+        <div
+          className="h-full bg-yellow-400 rounded-full"
+          style={{ width: `${progressPct}%`, transition: "width 0.5s cubic-bezier(0.4,0,0.2,1)" }}
+        />
+      </div>
+
+      {/* Per-card pip track */}
+      <div className="flex gap-1.5 mb-6">
+        {deck.cards.map((_, i) => (
+          <div
+            key={i}
+            className="flex-1 h-1.5 rounded-full"
+            style={{
+              background: i < index ? "#10b981" : i === index ? "#fbbf24" : "#374151",
+              transition: "background 0.35s ease",
+            }}
+          />
+        ))}
+      </div>
+
+      {/* ── 3-D flip card ─────────────────────────────────────────────────── */}
+      <div
+        className="ss-scene w-full mb-5 cursor-pointer"
+        style={{ height: 210 }}
+        onClick={flip}
+      >
+        {/* feedbackAnim overrides the entrance popIn; both go on the same element via key */}
+        <div
+          key={cardKey}
+          className={`ss-card ${flipped ? "flipped" : ""}`}
+          style={{ animation: feedbackAnim ?? "popIn 0.36s ease" }}
+        >
+          {/* Front face */}
+          <div className="ss-face bg-gray-800 border border-gray-700">
+            <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">Question</p>
+            <p className="text-white text-xl font-semibold leading-snug">{card.front}</p>
+            <p className="text-gray-600 text-xs mt-5">tap to flip</p>
+          </div>
+
+          {/* Back face */}
+          <div className="ss-face ss-back bg-gray-700 border border-gray-600">
+            <p className="text-yellow-400 text-xs uppercase tracking-widest mb-3">Answer</p>
+            <p className="text-white text-xl font-semibold leading-snug">{card.back}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Answer buttons (slide up when card is flipped) ─────────────────── */}
+      <div style={{
+        display: "flex", gap: 12,
+        opacity: flipped ? 1 : 0,
+        transform: flipped ? "translateY(0)" : "translateY(14px)",
+        transition: "opacity 0.25s ease, transform 0.25s ease",
+        pointerEvents: flipped ? "auto" : "none",
+      }}>
+        <Btn
+          onClick={() => answer(false)}
+          disabled={!!feedback}
+          className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white font-bold py-4 rounded-xl text-base"
+        >
+          ✗ Missed it
+        </Btn>
+        <Btn
+          onClick={() => answer(true)}
+          disabled={!!feedback}
+          className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-white font-bold py-4 rounded-xl text-base"
+        >
+          ✓ Got it!
+        </Btn>
+      </div>
+
+      {!flipped && (
+        <p
+          className="text-center text-gray-600 text-sm mt-4"
+          style={{ animation: "fadeSlideUp 0.3s ease" }}
+        >
+          Tap the card to reveal the answer
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Root ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [deck, setDeck] = useState(null);
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex justify-center">
+      <div className="w-full max-w-sm p-6">
+        <style dangerouslySetInnerHTML={{ __html: CSS }} />
+        {deck
+          ? <StudyMode deck={deck} onBack={() => setDeck(null)} />
+          : <Home onSelect={setDeck} />
+        }
+      </div>
+    </div>
+  );
+}
